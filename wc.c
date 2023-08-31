@@ -7,21 +7,21 @@ char buf[512];
 void
 wc(int fd, char *name)
 {
-  int i, n;
-  int l, w, c, inword;
+  int i, n; // indexing variables
+  int l, w, c, inword; // l = lines, w = words, c = characters, inword = boolean to describe if we are in a word or not
 
   l = w = c = 0;
   inword = 0;
   while((n = read(fd, buf, sizeof(buf))) > 0){
     for(i=0; i<n; i++){
-      c++;
+      c++; // num_chars++ (white space included)
       if(buf[i] == '\n')
-        l++;
+        l++; // num_lines++
       if(strchr(" \r\t\n\v", buf[i]))
-        inword = 0;
+        inword = 0; // if we encounter a whitespace character, we are no longer in a word
       else if(!inword){
-        w++;
-        inword = 1;
+        w++; // num_words++
+        inword = 1; // we are in a word till further notice
       }
     }
   }
@@ -29,6 +29,7 @@ wc(int fd, char *name)
     printf(1, "wc: read error\n");
     exit();
   }
+  // this is fprintf actually, 1 is stdout. name is name of the file that we are reading from
   printf(1, "%d %d %d %s\n", l, w, c, name);
 }
 

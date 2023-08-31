@@ -1,3 +1,13 @@
+Installation for the macOS operating system:
+
+- clone the repository
+- run `brew install qemu`
+- run all three commands listed in https://github.com/nativeos/homebrew-i386-elf-toolchain
+- replace the Makefile with https://github.com/ashr123/XV6-MacOS-Makefile/blob/master/Makefile
+- in the Makefile, on line 59, replace the value of variable QEMU with your local installation path (use `which qemu-system-i386` to find it).
+
+and you should be ready to go!
+
 NOTE: we have stopped maintaining the x86 version of xv6, and switched
 our efforts to the RISC-V version
 (https://github.com/mit-pdos/xv6-riscv.git)
