@@ -103,7 +103,12 @@ extern int sys_unlink(void);
 extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
+// extern int sys_worldpeace(void); // Added for worldpeace system call
+// extern int sys_numberofprocesses(void); // Added for numberofprocesses system call
+// extern int sys_whatsthestatus(void); // Added for whatsthestatus system call - notice the argument type is void.
+// extern int sys_spawn(void); // Added for spawn system call
 
+// the traptable is an array of function pointers
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
 [SYS_exit]    sys_exit,
@@ -126,6 +131,10 @@ static int (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+// [SYS_worldpeace] sys_worldpeace, // Added for worldpeace system call
+// [SYS_numberofprocesses] sys_numberofprocesses, // Added for numberofprocesses system call
+// [SYS_whatsthestatus] sys_whatsthestatus, // Added for whatsthestatus system call
+// [SYS_spawn] sys_spawn, // Added for spawn system call
 };
 
 void
@@ -136,6 +145,7 @@ syscall(void)
 
   num = curproc->tf->eax;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+    // the return value is stored in eax!
     curproc->tf->eax = syscalls[num]();
   } else {
     cprintf("%d %s: unknown sys call %d\n",

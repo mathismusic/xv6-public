@@ -1,3 +1,22 @@
+### Creating a syscall
+
+You want to create a syscall `ret func(args)`. Do the following:
+- add the signature of the call in `defs.h` appropriately
+- add the functionality of the calls in `proc.c`
+- add the function (but with a different signature - int func(void)!) to the extern list, and to the trap table (array of fptrs) in `syscall.c`
+- add a number for your syscall in `syscall.h`
+- now the key. In `sysfile.c`, add a function with signature int func(void) that picks up arguments from the stack, and using these calls the function that you wrote in `proc.c`
+- add the signature ret func(args) to `user.h`
+- add an instance of the macro `SYSCALL` as `SYSCALL(func)` to `usys.S`
+And you're done!
+
+### Adding a new file to xv6
+
+Go to the Makefile:
+
+to add file foo.c and add `_foo\` under UPROGS=, and add `foo.c` in EXTRA next to the other c files
+to add file bar to the filesystem, go to fs.img and add bar to both places next to the README. (check if necessary): add it to PRINT and EXTRA too.
+
 Installation for the macOS operating system:
 
 - clone the repository

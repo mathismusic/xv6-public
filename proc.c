@@ -198,7 +198,7 @@ fork(void)
   }
   np->sz = curproc->sz;
   np->parent = curproc;
-  *np->tf = *curproc->tf;
+  *np->tf = *curproc->tf; // so that state so far is the same in the parent and in the child (note that the state is copied, so they now have two copies of old information. Note that COW is not implemented.
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
@@ -208,6 +208,7 @@ fork(void)
       np->ofile[i] = filedup(curproc->ofile[i]);
   np->cwd = idup(curproc->cwd);
 
+  // the default name of child processes is the same as the parent
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
@@ -532,3 +533,124 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+// // world peace system call
+// void worldpeace(void) {
+//   cprintf("Systems are vital to World Peace !!\n");
+// }
+
+// // number of runnable process system call
+// int numberofprocesses(void) {
+//   int count = 0;
+//   struct proc *p;
+//   acquire(&ptable.lock);
+//   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+//     if(p->state == RUNNABLE) {
+//       count++;
+//     }
+//   }
+//   release(&ptable.lock);
+//   return count;
+// }
+
+// // added for whatsthestatus system call
+// int whatsthestatus(int pid) {
+//   struct proc *p;
+//   struct proc *in_question; // the process with the given pid
+//   acquire(&ptable.lock);
+
+//   // find in_question
+//   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+//     if (p->pid == pid) {
+//       in_question = p;
+//       break;
+//     }
+//   }
+  
+//   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+//     if(in_question->parent == p)
+//       break;
+
+//   // print whatever is needed
+  
+//   // first convert the state to string
+//   char *state;
+//   switch(in_question->state) {
+//     case UNUSED:
+//       state = "UNUSED";
+//       break;
+//     case EMBRYO:
+//       state = "EMBRYO";
+//       break;
+//     case SLEEPING:
+//       state = "SLEEPING";
+//       break;
+//     case RUNNABLE:
+//       state = "RUNNABLE";
+//       break;
+//     case RUNNING:
+//       state = "RUNNING";
+//       break;
+//     case ZOMBIE:
+//       state = "ZOMBIE";
+//       break;
+//     default:
+//       state = "UNKNOWN";
+//       break;
+//   }
+//   cprintf("%d %s %d %s\n", in_question->pid, state, p->pid, p->name);
+//   int ppid = p->pid; 
+//   release(&ptable.lock);
+//   return ppid;
+// }
+
+// // the spawn() system call
+// int spawn(int n, int *pids) {
+
+//   struct proc *parent = myproc();
+//   struct proc *np; // new process
+//   int allocated = 0;
+//   for (int j = 0; j < n; j++) {
+//     pids[j] = -1;
+//     // try to allocate process
+//     if ((np = allocproc()) == 0)
+//       continue;
+//     // try to copy page table for child process
+//     if ((np->pgdir = copyuvm(myproc()->pgdir, myproc()->sz)) == 0) {
+//       kfree(np->kstack);
+//       np->kstack = 0;
+//       np->state = UNUSED; // set it back to unused because page table allocation failed.
+//       continue;
+//     }
+
+//     // some copy business now
+//     np->sz = parent->sz; // same amount of memory allocated to both
+//     np->parent = parent;
+//     // *copy* trapframes - this is where child = parent so far comes in. One line of code.
+
+//     *np->tf = *parent->tf; // so that state so far is the same in the parent and in the child (note that the state is copied, so they now have two copies of old information. notice COW is not implemented).
+
+//     // copy open files and cwd (basically most of the proc struct for np)
+//     for (int i = 0; i < NOFILE; i++)
+//       if (parent->ofile[i])
+//         np->ofile[i] = filedup(parent->ofile[i]);
+//     np->cwd = idup(parent->cwd);
+
+//     // copy the name over (this is default behaviour from parent to child)
+//     safestrcpy(np->name, parent->name, sizeof(parent->name));
+
+//     // another important thing - setting the return value of the syscall in the child process. eax is sent as the return value to the process from return from trap
+//     np->tf->eax = 0;
+//     // we do not need to set parent's eax to the return value, doing `return ...` will set that (see usys.S)
+
+//     // set pid
+//     pids[j] = np->pid;
+//     allocated += 1;
+
+//     // set state to runnable
+//     acquire(&ptable.lock); // lock other processes, just for a second
+//     np->state = RUNNABLE;
+//     release(&ptable.lock);
+//   }
+//   return (!allocated)?-1:allocated;
+// }

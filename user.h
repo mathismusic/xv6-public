@@ -23,6 +23,10 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+// void worldpeace(void); // added for worldpeace system call
+// int numberofprocesses(void); // added for numberofprocesses system call
+// int whatsthestatus(int); // added for whatsthestatus system call
+// int spawn(int, int*); // added for spawn system call
 
 // ulib.c
 int stat(const char*, struct stat*);

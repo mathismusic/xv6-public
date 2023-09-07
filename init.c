@@ -31,7 +31,8 @@ main(void)
       printf(1, "init: exec sh failed\n");
       exit();
     }
+    // what does this do? - waits for children to exit, reaps zombie processes that were orphaned
     while((wpid=wait()) >= 0 && wpid != pid)
-      printf(1, "zombie!\n");
+      printf(1, "%d zombie!\n", wpid);
   }
 }
