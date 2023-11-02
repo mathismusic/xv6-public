@@ -12,10 +12,12 @@ main(void)
 {
   int pid, wpid;
 
+  // open console for reading
   if(open("console", O_RDWR) < 0){
     mknod("console", 1, 1);
     open("console", O_RDWR);
   }
+  // copy same file for stdout and stderr
   dup(0);  // stdout
   dup(0);  // stderr
 

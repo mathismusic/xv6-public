@@ -75,7 +75,7 @@ void            kbdintr(void);
 // lapic.c
 void            cmostime(struct rtcdate *r);
 int             lapicid(void);
-extern volatile uint*    lapic;
+extern volatile uint*    lapic; // The system always reads the current value of a volatile object from the memory location rather than keeping its value in a temporary register at the point it is requested, even if a previous instruction asked for the value from the same object.
 void            lapiceoi(void);
 void            lapicinit(void);
 void            lapicstartap(uchar, uint);
@@ -120,6 +120,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+int            getpasize(int);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

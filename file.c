@@ -84,8 +84,8 @@ int
 filestat(struct file *f, struct stat *st)
 {
   if(f->type == FD_INODE){
-    ilock(f->ip);
-    stati(f->ip, st);
+    ilock(f->ip); // lock inode in place
+    stati(f->ip, st); // copy stat information from inode.
     iunlock(f->ip);
     return 0;
   }

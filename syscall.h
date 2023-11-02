@@ -25,3 +25,4 @@
 // #define SYS_numberofprocesses 23
 // #define SYS_whatsthestatus 24
 // #define SYS_spawn 25
+#define SYS_getpasize 26

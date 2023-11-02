@@ -33,7 +33,7 @@ main(void)
   ideinit();       // disk 
   startothers();   // start other processors
   kinit2(P2V(4*1024*1024), P2V(PHYSTOP)); // must come after startothers()
-  userinit();      // first user process
+  userinit();      // set up first user process
   mpmain();        // finish this processor's setup
 }
 
@@ -51,10 +51,10 @@ mpenter(void)
 static void
 mpmain(void)
 {
-  cprintf("cpu%d: starting %d\n", cpuid(), cpuid());
-  idtinit();       // load idt register
-  xchg(&(mycpu()->started), 1); // tell startothers() we're up
-  scheduler();     // start running processes
+  cprintf("cpu%d: starting %d\n", cpuid(), cpuid()); // this prints each time a cpu is started
+  idtinit();       // load idt register - this is the interrupt descriptor table
+  xchg(&(mycpu()->started), 1); // tell startothers() we're up - this is a spinlock
+  scheduler();     // start running processes via the scheduler - this is the "main loop", if you will. The kernel has begun its work.
 }
 
 pde_t entrypgdir[];  // For entry.S

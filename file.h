@@ -18,11 +18,11 @@ struct inode {
   int valid;          // inode has been read from disk?
 
   short type;         // copy of disk inode
-  short major;
+  short major; // major device number (T_DEV only)
   short minor;
-  short nlink;
+  short nlink; // number of links to inode in file system
   uint size;
-  uint addrs[NDIRECT+1];
+  uint addrs[NDIRECT+1]; // the subdirectories of the inode - eh? each is the address of a block of the file system
 };
 
 // table mapping major device number to

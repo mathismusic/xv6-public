@@ -12,7 +12,7 @@
 struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
-uint ticks;
+uint ticks; // the number of timer interrupts since boot - roughly proportional (modulo timer stops) to the time elapsed since boot
 
 void
 tvinit(void)
@@ -38,10 +38,10 @@ trap(struct trapframe *tf)
 {
   if(tf->trapno == T_SYSCALL){
     if(myproc()->killed)
-      exit();
-    myproc()->tf = tf;
+      exit(); // this is where the process is 'actually' terminated
+    myproc()->tf = tf; // saving context
     syscall();
-    if(myproc()->killed)
+    if(myproc()->killed) // if the process was killed in the syscall - for example, see sys_sleep in proc.c
       exit();
     return;
   }
@@ -104,9 +104,9 @@ trap(struct trapframe *tf)
   // If interrupts were on while locks held, would need to check nlock.
   if(myproc() && myproc()->state == RUNNING &&
      tf->trapno == T_IRQ0+IRQ_TIMER)
-    yield();
+    yield(); // this is the only place that yield() is called, btw
 
   // Check if the process has been killed since we yielded
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)
-    exit();
+    exit(); // this is where the process is 'actually' terminated
 }

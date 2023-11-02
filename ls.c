@@ -3,6 +3,7 @@
 #include "user.h"
 #include "fs.h"
 
+// format the name of the last part of the path
 char*
 fmtname(char *path)
 {
@@ -35,18 +36,20 @@ ls(char *path)
     return;
   }
 
-  if(fstat(fd, &st) < 0){
+  if(fstat(fd, &st) < 0){ // try to get file metadata
     printf(2, "ls: cannot stat %s\n", path);
     close(fd);
     return;
   }
 
-  switch(st.type){
+  switch(st.type){ // based on the file
   case T_FILE:
+    // just print the file.
     printf(1, "%s %d %d %d\n", fmtname(path), st.type, st.ino, st.size);
     break;
 
   case T_DIR:
+    // oof case
     if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){
       printf(1, "ls: path too long\n");
       break;
@@ -57,12 +60,13 @@ ls(char *path)
     while(read(fd, &de, sizeof(de)) == sizeof(de)){
       if(de.inum == 0)
         continue;
-      memmove(p, de.name, DIRSIZ);
+      memmove(p, de.name, DIRSIZ); // copy the name of the subdirectory
       p[DIRSIZ] = 0;
-      if(stat(buf, &st) < 0){
+      if(stat(buf, &st) < 0){ // stat the name of the file
         printf(1, "ls: cannot stat %s\n", buf);
         continue;
       }
+      // the actual listing
       printf(1, "%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
     }
     break;
@@ -75,11 +79,11 @@ main(int argc, char *argv[])
 {
   int i;
 
-  if(argc < 2){
+  if(argc < 2){ // hey the just 'ls' command is ls .
     ls(".");
     exit();
   }
   for(i=1; i<argc; i++)
-    ls(argv[i]);
+    ls(argv[i]); // ls every directory. Nice.
   exit();
 }

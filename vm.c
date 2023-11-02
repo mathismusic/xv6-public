@@ -121,17 +121,25 @@ setupkvm(void)
   pde_t *pgdir;
   struct kmap *k;
 
+  // set up pg directory for the os
+  
   if((pgdir = (pde_t*)kalloc()) == 0)
     return 0;
+
   memset(pgdir, 0, PGSIZE);
+  
   if (P2V(PHYSTOP) > (void*)DEVSPACE)
     panic("PHYSTOP too high");
+  
   for(k = kmap; k < &kmap[NELEM(kmap)]; k++)
+    // map kernel va's to physical addresses.
     if(mappages(pgdir, k->virt, k->phys_end - k->phys_start,
                 (uint)k->phys_start, k->perm) < 0) {
       freevm(pgdir);
       return 0;
     }
+
+  // note that the page table for the operating system is only one-level deep 
   return pgdir;
 }
 
@@ -140,6 +148,7 @@ setupkvm(void)
 void
 kvmalloc(void)
 {
+  /* We need this to access memory even when there is no process running (such as when we context switch into the scheduler) */
   kpgdir = setupkvm();
   switchkvm();
 }
@@ -231,17 +240,17 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
-    mem = kalloc();
+    mem = kalloc(); // get a new page
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
-      deallocuvm(pgdir, newsz, oldsz);
+      deallocuvm(pgdir, newsz, oldsz); // deallocate everything allocated so far
       return 0;
     }
     memset(mem, 0, PGSIZE);
     if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){
-      cprintf("allocuvm out of memory (2)\n");
-      deallocuvm(pgdir, newsz, oldsz);
-      kfree(mem);
+      cprintf("allocuvm out of memory (2)\n"); // walkpgdir wasn't able to allocate a new page for the page table itself (see when mappages returns -1)
+      deallocuvm(pgdir, newsz, oldsz); // deallocate everything allocated so far
+      kfree(mem); // free the allocated page too
       return 0;
     }
   }
@@ -261,17 +270,18 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   if(newsz >= oldsz)
     return oldsz;
 
-  a = PGROUNDUP(newsz);
-  for(; a  < oldsz; a += PGSIZE){
-    pte = walkpgdir(pgdir, (char*)a, 0);
-    if(!pte)
-      a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
-    else if((*pte & PTE_P) != 0){
-      pa = PTE_ADDR(*pte);
+  a = PGROUNDUP(newsz); // round up to the next page (from here we need to deallocate). 0 to newsz-1 are the addresses that we need to save
+  for(; a  < oldsz; a += PGSIZE){ // pages to deallocate
+    pte = walkpgdir(pgdir, (char*)a, 0); // get pte for page a
+    if(!pte) // 0 iff the page table entry doesn't exist
+      a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE; // we need to skip to the next pde - all pages in between are already deallocated. -PGSIZE because the loop will increment a
+
+    else if((*pte & PTE_P) != 0){ // page present (pte has present bit set)
+      pa = PTE_ADDR(*pte); // get the pa from the pte
       if(pa == 0)
         panic("kfree");
       char *v = P2V(pa);
-      kfree(v);
+      kfree(v); // free the page corresponding to the page table entry
       *pte = 0;
     }
   }
@@ -287,13 +297,19 @@ freevm(pde_t *pgdir)
 
   if(pgdir == 0)
     panic("freevm: no pgdir");
-  deallocuvm(pgdir, KERNBASE, 0);
+  deallocuvm(pgdir, KERNBASE, 0); // free everything. LOL.
+
+  // free the page table itself
+
+  // ptables
   for(i = 0; i < NPDENTRIES; i++){
     if(pgdir[i] & PTE_P){
       char * v = P2V(PTE_ADDR(pgdir[i]));
       kfree(v);
     }
   }
+
+  // pdir
   kfree((char*)pgdir);
 }
 
@@ -313,7 +329,7 @@ clearpteu(pde_t *pgdir, char *uva)
 // Given a parent process's page table, create a copy
 // of it for a child.
 pde_t*
-copyuvm(pde_t *pgdir, uint sz)
+copyuvm(pde_t *pgdir, uint sz) // stands for copy user virtual memory
 {
   pde_t *d;
   pte_t *pte;

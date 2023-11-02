@@ -79,7 +79,8 @@ exec(char *path, char **argv)
   }
   ustack[3+argc] = 0;
 
-  ustack[0] = 0xffffffff;  // fake return PC
+  ustack[0] = 0xffffffff;  // fake return PC from main
+  // ustack[0] = (uint)exit; try!
   ustack[1] = argc;
   ustack[2] = sp - (argc+1)*4;  // argv pointer
 
@@ -101,7 +102,7 @@ exec(char *path, char **argv)
   curproc->tf->esp = sp;
   switchuvm(curproc);
   freevm(oldpgdir);
-  return 0;
+  return 0; // return to exec() in syscall.c
 
  bad:
   if(pgdir)

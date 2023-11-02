@@ -241,7 +241,7 @@ bad:
 static struct inode*
 create(char *path, short type, short major, short minor)
 {
-  struct inode *ip, *dp;
+  struct inode *ip, *dp; // ip is the inode of the file to be created, dp is the inode of the directory in which the file is to be created
   char name[DIRSIZ];
 
   if((dp = nameiparent(path, name)) == 0)
@@ -470,3 +470,10 @@ sys_pipe(void)
 //     // run kernel code. Why not just one function to do both these? What is the need for the separation? - okay, right. see syscall.c, each of the sys_* calls is a int(void) function wrappers for real (different signature) syscalls.
 //     return spawn(pid, status);
 // }
+
+// added for getpasize system call
+int sys_getpasize(void) {
+    int pid;
+    if (argint(0, &pid) < 0) return -1;
+    return getpasize(pid);
+}

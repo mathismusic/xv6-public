@@ -61,17 +61,23 @@ kfree(char *v)
 {
   struct run *r;
 
+  // check for invalid addresses
+  // end is the first address after kernel loaded from ELF file
   if((uint)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
     panic("kfree");
 
-  // Fill with junk to catch dangling refs.
+  // Fill with junk to catch dangling refs. - LOL.
   memset(v, 1, PGSIZE);
 
-  if(kmem.use_lock)
+  if(kmem.use_lock) // can we use the lock?
     acquire(&kmem.lock);
+  
+  // insert v into the free list
   r = (struct run*)v;
   r->next = kmem.freelist;
   kmem.freelist = r;
+  // nice work.
+
   if(kmem.use_lock)
     release(&kmem.lock);
 }
@@ -86,9 +92,12 @@ kalloc(void)
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
+
+  // pop from the front of the free list
   r = kmem.freelist;
   if(r)
     kmem.freelist = r->next;
+
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;

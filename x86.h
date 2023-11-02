@@ -145,10 +145,10 @@ lcr3(uint val)
 }
 
 //PAGEBREAK: 36
-// Layout of the trap frame built on the stack by the
-// hardware and by trapasm.S, and passed to trap().
+// Layout of the trap frame *built on the stack by the
+// hardware and by trapasm.S*, and passed to trap().
 struct trapframe {
-  // registers as pushed by pusha
+  // registers as pushed by pushal
   uint edi;
   uint esi;
   uint ebp;
@@ -158,7 +158,7 @@ struct trapframe {
   uint ecx;
   uint eax;
 
-  // rest of trap frame
+  // rest of trap frame (that we explicitly pushed onto the stack) 
   ushort gs;
   ushort padding1;
   ushort fs;
@@ -176,7 +176,7 @@ struct trapframe {
   ushort padding5;
   uint eflags;
 
-  // below here only when crossing rings, such as from user to kernel
+  // below here only when crossing rings, such as from user to kernel - the things pushed by int and popped by iret
   uint esp;
   ushort ss;
   ushort padding6;

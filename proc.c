@@ -7,14 +7,20 @@
 #include "proc.h"
 #include "spinlock.h"
 
+// process table. It is guarded by a lock, because it is shared across processes (the race condition for updates still exists).
+// when is the lock acquired?
+// - to create a new process
+// - to change the state of the PCB
+// - when the scheduler is checking for runnable processes
+// - before putting a process to sleep (we need to set its state to SLEEPING, so)
 struct {
-  struct spinlock lock;
-  struct proc proc[NPROC];
+  struct spinlock lock; // lock for the process table
+  struct proc proc[NPROC]; // array of proc structs
 } ptable;
 
-static struct proc *initproc;
+static struct proc *initproc; // the init process
 
-int nextpid = 1;
+int nextpid = 1; // next pid to be assigned. It is incremented each time a new process is created. (never decremented)
 extern void forkret(void);
 extern void trapret(void);
 
@@ -23,17 +29,17 @@ static void wakeup1(void *chan);
 void
 pinit(void)
 {
-  initlock(&ptable.lock, "ptable");
+  initlock(&ptable.lock, "ptable"); // initialize the lock for the process table
 }
 
 // Must be called with interrupts disabled
 int
 cpuid() {
-  return mycpu()-cpus;
+  return mycpu()-cpus; // index of the current cpu in the cpus array
 }
 
 // Must be called with interrupts disabled to avoid the caller being
-// rescheduled between reading lapicid and running through the loop.
+// rescheduled between reading lapicid and running through the loop. Wow, concurrency issues.
 struct cpu*
 mycpu(void)
 {
@@ -74,7 +80,7 @@ static struct proc*
 allocproc(void)
 {
   struct proc *p;
-  char *sp;
+  char *sp; // stack pointer to the kernel stack of the process
 
   acquire(&ptable.lock);
 
@@ -82,37 +88,38 @@ allocproc(void)
     if(p->state == UNUSED)
       goto found;
 
+  // otherwise no unused entry found, we return
   release(&ptable.lock);
   return 0;
 
 found:
-  p->state = EMBRYO;
-  p->pid = nextpid++;
+  p->state = EMBRYO; // embryo: process created, has not been initialized yet
+  p->pid = nextpid++; // assign pid
 
   release(&ptable.lock);
 
   // Allocate kernel stack.
-  if((p->kstack = kalloc()) == 0){
-    p->state = UNUSED;
+  if((p->kstack = kalloc()) == 0){ // returns page for the kernel stack of this process
+    p->state = UNUSED; // back to unused
     return 0;
   }
-  sp = p->kstack + KSTACKSIZE;
+  sp = p->kstack + KSTACKSIZE; // sp = one past the end of the kernel stack. Stack grows downwards
 
-  // Leave room for trap frame.
-  sp -= sizeof *p->tf;
-  p->tf = (struct trapframe*)sp;
+  // Leave room for trap frame - also stored on the kernel stack. Why is a trap frame required?
+  sp -= sizeof *p->tf; // stack frame goes at the top of the kernel stack (highest address)
+  p->tf = (struct trapframe*)sp; // a pointer to a struct is at the lowest address of the struct's memory
 
   // Set up new context to start executing at forkret,
   // which returns to trapret.
   sp -= 4;
-  *(uint*)sp = (uint)trapret;
+  *(uint*)sp = (uint)trapret; // put the address of trapret next on the stack - 
 
-  sp -= sizeof *p->context;
-  p->context = (struct context*)sp;
-  memset(p->context, 0, sizeof *p->context);
-  p->context->eip = (uint)forkret;
+  sp -= sizeof *p->context; // allocate space for the context struct
+  p->context = (struct context*)sp; // set the context pointer to the lowest address of the context struct's memory
+  memset(p->context, 0, sizeof *p->context); // set all bytes of the context struct to 0 -> trivial context
+  p->context->eip = (uint)forkret; // set eip to the address of forkret -> so that on its first scheduling, it will start executing at forkret - we have got to return from the fork system call in the child, right?
 
-  return p;
+  return p; // return this embryo process
 }
 
 //PAGEBREAK: 32
@@ -189,6 +196,8 @@ fork(void)
     return -1;
   }
 
+  // allocproc returns an embryo process, so we need to initialize it
+
   // Copy process state from proc.
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
     kfree(np->kstack);
@@ -250,21 +259,21 @@ exit(void)
 
   acquire(&ptable.lock);
 
-  // Parent might be sleeping in wait().
+  // Parent might be sleeping in wait() - wake it up.
   wakeup1(curproc->parent);
 
-  // Pass abandoned children to init.
+  // Pass abandoned children to init. Neat.
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->parent == curproc){
       p->parent = initproc;
       if(p->state == ZOMBIE)
-        wakeup1(initproc);
+        wakeup1(initproc); // wake up initproc if it is sleeping in wait()
     }
   }
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
-  sched();
+  sched(); // never to return. Because once this is switched out it will never run again since state = ZOMBIE. Nice.
   panic("zombie exit");
 }
 
@@ -324,9 +333,11 @@ void
 scheduler(void)
 {
   struct proc *p;
-  struct cpu *c = mycpu();
-  c->proc = 0;
+  struct cpu *c = mycpu(); // which cpu's scheduler is this?
+
+  c->proc = 0; // pid starts at 0, rn init is to be run
   
+  // infinite loop. Never return
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -334,26 +345,32 @@ scheduler(void)
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
+      if(p->state != RUNNABLE) // just select the first runnable process
         continue;
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
+      // Switch to chosen runnable process.  It is the process's job
+      // to release ptable.lock (so that it can run) and then reacquire it
       // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+      
+      c->proc = p; // set current process on cpu to p
+      switchuvm(p); // switch to user virtual memory - basically, load cr3 and a few other masks (base and bounds, for ex the bottom of the stack) into the cpu
+      p->state = RUNNING; // change state to running, just before switching to it
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+      swtch(&(c->scheduler), p->context); // switch from scheduler process to it. Store scheduler context into c->scheduler for next time.
+      // when we return here, it is because the process completed its quota/syscall/fault etc and sched() was called, switching from p to c->scheduler, which of course, returns here
+
+      switchkvm(); // switch to kernel page table for the scheduler process
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
-      c->proc = 0;
+      c->proc = 0; // no user process running at the moment on this cpu
     }
     release(&ptable.lock);
-
-  }
+  } 
+  
+  // one interesting point to note here. Notice how we were able to set 'p->state = RUNNING' after switching to p->pgdir. This would mean that p->pgdir contains references to kernel space addresses. Why not do the p->state = RUNNING before switching to p->pgdir? Well, no bit gain, since the code for swtch is also in kernel space! 
+  
+  // The abstraction of needing to access OS stuff while keeping the page directory of the user is thus needed - one solution (used here) is to maintain mappages of the kernel space in the user pgdir as well - and another, using more hardware support: use a cr4 register with the pa of the kernel page table - issue is how does the hardware know which one to walk when given an address? Many double walks (one successful, other unsuccessful) are required - not a good design. So we use the first solution.
 }
 
 // Enter scheduler.  Must hold only ptable.lock
@@ -366,6 +383,8 @@ scheduler(void)
 void
 sched(void)
 {
+  // this function is called from three places: yield(), wait(), exit(). Its call stack thus is:
+  // prev_calls (eg. eip just before alltraps -> eip just bfr trap) | wherever-it-came-from-eip | local args
   int intena;
   struct proc *p = myproc();
 
@@ -377,7 +396,7 @@ sched(void)
     panic("sched running");
   if(readeflags()&FL_IF)
     panic("sched interruptible");
-  intena = mycpu()->intena;
+  intena = mycpu()->intena; // save the interrupt enable flag
   swtch(&p->context, mycpu()->scheduler);
   mycpu()->intena = intena;
 }
@@ -393,7 +412,7 @@ yield(void)
 }
 
 // A fork child's very first scheduling by scheduler()
-// will swtch here.  "Return" to user space.
+// will swtch here (this is the eip of the fork child that allocproc hardcodes).  "Return" to user space.
 void
 forkret(void)
 {
@@ -410,7 +429,7 @@ forkret(void)
     initlog(ROOTDEV);
   }
 
-  // Return to "caller", actually trapret (see allocproc).
+  // Return to "caller", actually trapret (see allocproc). Hmm, how? eip is at forkret, so it's not really a function call, after this exits won't we just like go 4 bytes ahead and execute the next instruction?
 }
 
 // Atomically release lock and sleep on chan.
@@ -440,7 +459,10 @@ sleep(void *chan, struct spinlock *lk)
   p->chan = chan;
   p->state = SLEEPING;
 
+  // give up the cpu to the os to schedule something else
   sched();
+
+  // we're back to this process - we have been woken up by wakeup1 and are ready to run
 
   // Tidy up.
   p->chan = 0;
@@ -534,123 +556,155 @@ procdump(void)
   }
 }
 
-// // world peace system call
-// void worldpeace(void) {
-//   cprintf("Systems are vital to World Peace !!\n");
-// }
+// world peace system call
+void worldpeace(void) {
+  cprintf("Systems are vital to World Peace !!\n");
+}
 
-// // number of runnable process system call
-// int numberofprocesses(void) {
-//   int count = 0;
-//   struct proc *p;
-//   acquire(&ptable.lock);
-//   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-//     if(p->state == RUNNABLE) {
-//       count++;
-//     }
-//   }
-//   release(&ptable.lock);
-//   return count;
-// }
+// number of runnable process system call
+int numberofprocesses(void) {
+  int count = 0;
+  struct proc *p;
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(p->state == RUNNABLE) {
+      count++;
+    }
+  }
+  release(&ptable.lock);
+  return count;
+}
 
-// // added for whatsthestatus system call
-// int whatsthestatus(int pid) {
-//   struct proc *p;
-//   struct proc *in_question; // the process with the given pid
-//   acquire(&ptable.lock);
+// added for whatsthestatus system call
+int whatsthestatus(int pid) {
+  struct proc *p;
+  struct proc *in_question; // the process with the given pid
+  acquire(&ptable.lock);
 
-//   // find in_question
-//   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-//     if (p->pid == pid) {
-//       in_question = p;
-//       break;
-//     }
-//   }
+  // find in_question
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->pid == pid) {
+      in_question = p;
+      break;
+    }
+  }
   
-//   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-//     if(in_question->parent == p)
-//       break;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    if(in_question->parent == p)
+      break;
 
-//   // print whatever is needed
+  // print whatever is needed
   
-//   // first convert the state to string
-//   char *state;
-//   switch(in_question->state) {
-//     case UNUSED:
-//       state = "UNUSED";
-//       break;
-//     case EMBRYO:
-//       state = "EMBRYO";
-//       break;
-//     case SLEEPING:
-//       state = "SLEEPING";
-//       break;
-//     case RUNNABLE:
-//       state = "RUNNABLE";
-//       break;
-//     case RUNNING:
-//       state = "RUNNING";
-//       break;
-//     case ZOMBIE:
-//       state = "ZOMBIE";
-//       break;
-//     default:
-//       state = "UNKNOWN";
-//       break;
-//   }
-//   cprintf("%d %s %d %s\n", in_question->pid, state, p->pid, p->name);
-//   int ppid = p->pid; 
-//   release(&ptable.lock);
-//   return ppid;
-// }
+  // first convert the state to string
+  char *state;
+  switch(in_question->state) {
+    case UNUSED:
+      state = "UNUSED";
+      break;
+    case EMBRYO:
+      state = "EMBRYO";
+      break;
+    case SLEEPING:
+      state = "SLEEPING";
+      break;
+    case RUNNABLE:
+      state = "RUNNABLE";
+      break;
+    case RUNNING:
+      state = "RUNNING";
+      break;
+    case ZOMBIE:
+      state = "ZOMBIE";
+      break;
+    default:
+      state = "UNKNOWN";
+      break;
+  }
+  cprintf("%d %s %d %s\n", in_question->pid, state, p->pid, p->name);
+  int ppid = p->pid; 
+  release(&ptable.lock);
+  return ppid;
+}
 
-// // the spawn() system call
-// int spawn(int n, int *pids) {
+// the spawn() system call
+int spawn(int n, int *pids) {
 
-//   struct proc *parent = myproc();
-//   struct proc *np; // new process
-//   int allocated = 0;
-//   for (int j = 0; j < n; j++) {
-//     pids[j] = -1;
-//     // try to allocate process
-//     if ((np = allocproc()) == 0)
-//       continue;
-//     // try to copy page table for child process
-//     if ((np->pgdir = copyuvm(myproc()->pgdir, myproc()->sz)) == 0) {
-//       kfree(np->kstack);
-//       np->kstack = 0;
-//       np->state = UNUSED; // set it back to unused because page table allocation failed.
-//       continue;
-//     }
+  struct proc *parent = myproc();
+  struct proc *np; // new process
+  int allocated = 0;
+  for (int j = 0; j < n; j++) {
+    pids[j] = -1;
+    // try to allocate process
+    if ((np = allocproc()) == 0)
+      continue;
+    // try to copy page table for child process
+    if ((np->pgdir = copyuvm(myproc()->pgdir, myproc()->sz)) == 0) {
+      kfree(np->kstack);
+      np->kstack = 0;
+      np->state = UNUSED; // set it back to unused because page table allocation failed.
+      continue;
+    }
 
-//     // some copy business now
-//     np->sz = parent->sz; // same amount of memory allocated to both
-//     np->parent = parent;
-//     // *copy* trapframes - this is where child = parent so far comes in. One line of code.
+    // some copy business now
+    np->sz = parent->sz; // same amount of memory allocated to both
+    np->parent = parent;
+    // *copy* trapframes - this is where child = parent so far comes in. One line of code.
 
-//     *np->tf = *parent->tf; // so that state so far is the same in the parent and in the child (note that the state is copied, so they now have two copies of old information. notice COW is not implemented).
+    *np->tf = *parent->tf; // so that state so far is the same in the parent and in the child (note that the state is copied, so they now have two copies of old information. notice COW is not implemented).
 
-//     // copy open files and cwd (basically most of the proc struct for np)
-//     for (int i = 0; i < NOFILE; i++)
-//       if (parent->ofile[i])
-//         np->ofile[i] = filedup(parent->ofile[i]);
-//     np->cwd = idup(parent->cwd);
+    // copy open files and cwd (basically most of the proc struct for np)
+    for (int i = 0; i < NOFILE; i++)
+      if (parent->ofile[i])
+        np->ofile[i] = filedup(parent->ofile[i]);
+    np->cwd = idup(parent->cwd);
 
-//     // copy the name over (this is default behaviour from parent to child)
-//     safestrcpy(np->name, parent->name, sizeof(parent->name));
+    // copy the name over (this is default behaviour from parent to child)
+    safestrcpy(np->name, parent->name, sizeof(parent->name));
 
-//     // another important thing - setting the return value of the syscall in the child process. eax is sent as the return value to the process from return from trap
-//     np->tf->eax = 0;
-//     // we do not need to set parent's eax to the return value, doing `return ...` will set that (see usys.S)
+    // another important thing - setting the return value of the syscall in the child process. eax is sent as the return value to the process from return from trap
+    np->tf->eax = 0;
+    // we do not need to set parent's eax to the return value, doing `return ...` will set that (see usys.S)
 
-//     // set pid
-//     pids[j] = np->pid;
-//     allocated += 1;
+    // set pid
+    pids[j] = np->pid;
+    allocated += 1;
 
-//     // set state to runnable
-//     acquire(&ptable.lock); // lock other processes, just for a second
-//     np->state = RUNNABLE;
-//     release(&ptable.lock);
-//   }
-//   return (!allocated)?-1:allocated;
-// }
+    // set state to runnable
+    acquire(&ptable.lock); // lock other processes, just for a second
+    np->state = RUNNABLE;
+    release(&ptable.lock);
+  }
+  return (!allocated)?-1:allocated;
+}
+
+// virtual to physical address
+uint va2pa(uint virtual_addr) {
+  // pte_t *pte = walkpgdir(myproc()->pgdir, (void *)virtual_addr, 0);
+  pde_t *pde; pte_t *pte;
+  pde = myproc()->pgdir;
+  pde = &pde[PDX(virtual_addr)];
+  pte = (pte_t*)P2V(PTE_ADDR(*pde)); // hey, wait, why is the physical address of the page table only 20 bits long? And not 32?
+  // first get the 20bit mapping:
+  uint pte_index = PTX(virtual_addr);
+  uint pa20 = PTE_ADDR(pte[pte_index]);
+  uint pa = pa20 | (virtual_addr & 0xFFF); // the last 12 bits are the offset
+  return pa;
+}
+
+// get size of physical memory of process (not os) in pages
+int getpasize(int pid) {
+  struct proc *p;
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->pid == pid) break;
+  }
+  if (p == &ptable.proc[NPROC]) return -1; // no such process
+  int count = 0;
+  for (pde_t *pde = p->pgdir; pde < &p->pgdir[NPDENTRIES/2]; pde++) {
+    if (!(*pde & PTE_P)) continue;
+    pte_t *pgtable = (pte_t*)P2V(PTE_ADDR(*pde));
+    for (int i = 0; i < NPTENTRIES; i++) {
+      if (pgtable[i] & PTE_P) count++;
+    }
+  }
+  return count;
+}

@@ -27,6 +27,7 @@ int uptime(void);
 // int numberofprocesses(void); // added for numberofprocesses system call
 // int whatsthestatus(int); // added for whatsthestatus system call
 // int spawn(int, int*); // added for spawn system call
+int getpasize(int);
 
 // ulib.c
 int stat(const char*, struct stat*);

@@ -11,10 +11,10 @@ print ".globl alltraps\n";
 for(my $i = 0; $i < 256; $i++){
     print ".globl vector$i\n";
     print "vector$i:\n";
-    if(!($i == 8 || ($i >= 10 && $i <= 14) || $i == 17)){
-        print "  pushl \$0\n";
+    if(!($i == 8 || ($i >= 10 && $i <= 14) || $i == 17)){ # i = 8, 10..14, 17 are for when you change rings, and in that case the required data is already there. In all other cases, use padding there instead.
+        print "  pushl \$0 # padding\n";
     }
-    print "  pushl \$$i\n";
+    print "  pushl \$$i # trapno\n";
     print "  jmp alltraps\n";
 }
 
