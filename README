@@ -22,7 +22,7 @@ Installation for the macOS operating system:
 - clone the repository
 - run `brew install qemu`
 - run all three commands listed in https://github.com/nativeos/homebrew-i386-elf-toolchain
-- replace the Makefile with https://github.com/ashr123/XV6-MacOS-Makefile/blob/master/Makefile
+- replace the Makefile with https://github.com/ashr123/XV6-MacOS-Makefile/blob/master/Makefile (or change existing makefile, the only changes are (a) line 35 `TOOLPREFIX = i386-elf-`, (b) line 54 `QEMU = $(which qemu-system-i386)` - or see next point, (c) line 79 remove `-Wall` from `CFLAGS`)
 - in the Makefile, on line 59, replace the value of variable QEMU with your local installation path (use `which qemu-system-i386` to find it).
 
 and you should be ready to go!
