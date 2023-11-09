@@ -47,9 +47,9 @@ xshort(ushort x)
 {
   ushort y;
   uchar *a = (uchar*)&y;
-  a[0] = x;
-  a[1] = x >> 8;
-  return y;
+  a[0] = x; // actually (uchar)x = x & 0xFF (the least significant byte)
+  a[1] = x >> 8; // and then the most significant byte
+  return y; // a new ushort with the address &y being that of the least significant byte
 }
 
 uint

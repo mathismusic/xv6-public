@@ -10,19 +10,23 @@
 #include "sleeplock.h"
 #include "file.h"
 
+// device switch table - contains pointers to device-specific read and write calls. A very convenient tool.
 struct devsw devsw[NDEV];
+
+// the open file table. Again, just a cache for file objects. We are finally at the abstraction where we can treat files like processes and the ftable like a good old ptable.
 struct {
   struct spinlock lock;
   struct file file[NFILE];
 } ftable;
 
+// initialize the OFT
 void
 fileinit(void)
 {
   initlock(&ftable.lock, "ftable");
 }
 
-// Allocate a file structure.
+// Allocate a new file structure.
 struct file*
 filealloc(void)
 {
@@ -105,9 +109,9 @@ fileread(struct file *f, char *addr, int n)
   if(f->type == FD_INODE){
     ilock(f->ip);
     if((r = readi(f->ip, addr, f->off, n)) > 0)
-      f->off += r;
+      f->off += r; // offset incremented!
     iunlock(f->ip);
-    return r;
+    return r; // and return the number of bytes read!
   }
   panic("fileread");
 }
@@ -150,7 +154,7 @@ filewrite(struct file *f, char *addr, int n)
         panic("short filewrite");
       i += r;
     }
-    return i == n ? n : -1;
+    return i == n ? n : -1; // why not just return i?
   }
   panic("filewrite");
 }

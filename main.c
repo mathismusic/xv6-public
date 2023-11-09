@@ -53,7 +53,7 @@ mpmain(void)
 {
   cprintf("cpu%d: starting %d\n", cpuid(), cpuid()); // this prints each time a cpu is started
   idtinit();       // load idt register - this is the interrupt descriptor table
-  xchg(&(mycpu()->started), 1); // tell startothers() we're up - this is a spinlock
+  xchg(&(mycpu()->started), 1); // tell startothers() we're up.
   scheduler();     // start running processes via the scheduler - this is the "main loop", if you will. The kernel has begun its work.
 }
 

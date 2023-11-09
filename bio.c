@@ -26,26 +26,30 @@
 #include "fs.h"
 #include "buf.h"
 
+// buffer cache, maintained in LRU order, all in kvm
 struct {
-  struct spinlock lock;
+  struct spinlock lock; // lock on the cache, because common to all CPUs
   struct buf buf[NBUF];
 
   // Linked list of all buffers, through prev/next.
   // head.next is most recently used.
   struct buf head;
-} bcache;
+} bcache; // notice how this is a linked list implementation via arrays, thus we get performance of linked lists and caching boosts of arrays. Quite nice.
 
 void
-binit(void)
+binit(void) // initialize the buffer cache
 {
   struct buf *b;
 
-  initlock(&bcache.lock, "bcache");
+  initlock(&bcache.lock, "bcache"); // initialie bcache lock
 
 //PAGEBREAK!
+
   // Create linked list of buffers
   bcache.head.prev = &bcache.head;
-  bcache.head.next = &bcache.head;
+  bcache.head.next = &bcache.head; // self loops (empty cache)
+
+  // put all buffers on free list. Notice the dll is circular and implemented in reverse (head.next is most recently used)
   for(b = bcache.buf; b < bcache.buf+NBUF; b++){
     b->next = bcache.head.next;
     b->prev = &bcache.head;
@@ -63,14 +67,14 @@ bget(uint dev, uint blockno)
 {
   struct buf *b;
 
-  acquire(&bcache.lock);
+  acquire(&bcache.lock); // bcache shared
 
   // Is the block already cached?
   for(b = bcache.head.next; b != &bcache.head; b = b->next){
     if(b->dev == dev && b->blockno == blockno){
-      b->refcnt++;
+      b->refcnt++; // ah, simply implement refcnt. It's the same block in memory, after all.
       release(&bcache.lock);
-      acquiresleep(&b->lock);
+      acquiresleep(&b->lock); // acquire lock on the buffer (we return locked buffer)
       return b;
     }
   }
@@ -79,16 +83,18 @@ bget(uint dev, uint blockno)
   // Even if refcnt==0, B_DIRTY indicates a buffer is in use
   // because log.c has modified it but not yet committed it.
   for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
-    if(b->refcnt == 0 && (b->flags & B_DIRTY) == 0) {
+    if(b->refcnt == 0 && (b->flags & B_DIRTY) == 0) { // eviction from cache!
       b->dev = dev;
       b->blockno = blockno;
-      b->flags = 0;
+      b->flags = 0; // not valid or dirty
       b->refcnt = 1;
       release(&bcache.lock);
       acquiresleep(&b->lock);
       return b;
     }
   }
+
+  // no available buffers - we are unable to allocate a buffer for the disk block!
   panic("bget: no buffers");
 }
 
@@ -98,11 +104,12 @@ bread(uint dev, uint blockno)
 {
   struct buf *b;
 
-  b = bget(dev, blockno);
+  b = bget(dev, blockno); // b is a locked buffer
+  // read from disk into buffer if b was just allocated
   if((b->flags & B_VALID) == 0) {
-    iderw(b);
+    iderw(b); /* note that this only enqueues b to be written; the write to disk may actually be later */
   }
-  return b;
+  return b; // still locked - no other process can use it
 }
 
 // Write b's contents to disk.  Must be locked.
@@ -123,12 +130,13 @@ brelse(struct buf *b)
   if(!holdingsleep(&b->lock))
     panic("brelse");
 
+  // release lock
   releasesleep(&b->lock);
 
   acquire(&bcache.lock);
   b->refcnt--;
   if (b->refcnt == 0) {
-    // no one is waiting for it.
+    // no one is waiting for it. Move it to the end of the array (the first to be allocated next time)
     b->next->prev = b->prev;
     b->prev->next = b->next;
     b->next = bcache.head.next;

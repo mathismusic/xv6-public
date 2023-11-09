@@ -50,6 +50,7 @@ struct dinode {
 // Directory is a file containing a sequence of dirent structures.
 #define DIRSIZ 14
 
+// a directory entry (one of the pairs that is stored in a directory file). For simplicity, all directory entries are of the same size, and the name is fixed to a max of 14 characters.
 struct dirent {
   ushort inum;
   char name[DIRSIZ];
