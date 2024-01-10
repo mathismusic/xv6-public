@@ -457,7 +457,7 @@ stati(struct inode *ip, struct stat *st)
 //PAGEBREAK!
 
 // Read data from inode. Arguments: inode to read from, buffer to read into, offset to start reading from, number of bytes to read.
-// Caller must hold ip->lock.
+// Caller must hold ip->lock. This function issues read requests to disk if a block is not present in the (LRU) buf cache.
 int
 readi(struct inode *ip, char *dst, uint off, uint n)
 {

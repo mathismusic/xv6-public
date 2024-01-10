@@ -252,12 +252,12 @@ create(char *path, short type, short major, short minor)
     iunlockput(dp);
     ilock(ip);
     if(type == T_FILE && ip->type == T_FILE)
-      return ip;
+      return ip; // file already exists
     iunlockput(ip);
     return 0;
   }
 
-  if((ip = ialloc(dp->dev, type)) == 0)
+  if((ip = ialloc(dp->dev, type)) == 0) // allocate an inode for the file
     panic("create: ialloc");
 
   ilock(ip);
@@ -274,6 +274,7 @@ create(char *path, short type, short major, short minor)
       panic("create dots");
   }
 
+  // add the file to the directory
   if(dirlink(dp, name, ip->inum) < 0)
     panic("create: dirlink");
 

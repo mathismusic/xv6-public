@@ -1,4 +1,4 @@
-// Mutual exclusion spin locks.
+// Mutual exclusion spin locks. Only for os space
 
 #include "types.h"
 #include "defs.h"
@@ -24,7 +24,7 @@ initlock(struct spinlock *lk, char *name)
 void
 acquire(struct spinlock *lk)
 {
-  pushcli(); // disable interrupts to avoid deadlock.
+  pushcli(); // disable interrupts to avoid deadlock. Example of deadlock if interrupts are not disabled: 
   if(holding(lk))
     panic("acquire");
 

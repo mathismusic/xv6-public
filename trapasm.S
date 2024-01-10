@@ -1,9 +1,9 @@
 #include "mmu.h"
 
-# so the compiled code, on syscall, had an 'int' instruction (part of the hardware isa) on a syscall. It was called on a syscall with the syscall number (or index in the interrput vector table) stored in 
+# so the compiled code, on syscall, had an 'int' instruction (part of the hardware isa) on a syscall. It was called on a syscall with the syscall number (or index in the interrupt vector table) passed.
 
 
-# vectors.S sends all traps here. We are in the kernel.
+# vectors.S sends all interrupts here. We are in the kernel, using the kernel stack of the process that got interrupted.
 .globl alltraps # the asm version of extern
 
 alltraps:
@@ -13,8 +13,8 @@ alltraps:
   pushl %es # push the extra data segment
   pushl %fs # push the file system data segment
   pushl %gs # push the general data segment
-  pushal # push all the registers! lol wow! The registers are pushed in order - eax, ecx, edx, ebx, eip, ebp, esi, edi. Notice how the context shows up perfectly (in reverse, but that's how all structs are stored on the stack) in the trap frame.
-  
+  pushal # push all the registers! lol wow! The registers are pushed in order - eax, ecx, edx, ebx, eip, ebp, esi, edi.
+
   # Set up data segments.̦
   movw $(SEG_KDATA<<3), %ax # load the kernel data segment
   movw %ax, %ds # set the data segment to the kernel data segment
